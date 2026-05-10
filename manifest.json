@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Smart Tabs for Gemini",
+  "version": "0.1.0",
+  "description": "Adds smart navigation tabs to Gemini conversations.",
+  "host_permissions": [
+    "https://gemini.google.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["dist/content.js"],
+      "css": ["src/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "activeTab"]
+}

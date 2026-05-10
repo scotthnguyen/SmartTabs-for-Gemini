@@ -1,2 +1,2 @@
 # SmartTabs-for-Gemini
-Stop wasting time scrolling through Gemini
+Stop wasting time scrolling through Gemini 

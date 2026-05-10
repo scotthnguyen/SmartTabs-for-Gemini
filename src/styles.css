@@ -1,0 +1,374 @@
+#smart-tabs-sidebar {
+  position: fixed;
+  width: 220px;
+  max-height: 72vh;
+  overflow-y: auto;
+
+  background: rgba(32, 33, 35, 0.42);
+  backdrop-filter: blur(14px);
+
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+
+  padding: 10px;
+  z-index: 100;
+
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Header */
+
+.smart-tabs-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.smart-tabs-title {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 4px 6px 8px 6px;
+}
+
+/* Header buttons */
+
+.smart-tabs-help-btn,
+.smart-tabs-hide-btn,
+.smart-tabs-bookmark-btn {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
+.smart-tabs-help-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 0;
+}
+
+.smart-tabs-bookmark-btn {
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.smart-tabs-hide-btn {
+  font-size: 11px;
+}
+
+.smart-tabs-help-btn:hover,
+.smart-tabs-hide-btn:hover,
+.smart-tabs-bookmark-btn:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Optional hint text, currently unused if you removed the hint block */
+
+.smart-tabs-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.38);
+  padding: 0 6px 10px 6px;
+}
+
+.smart-tabs-hint strong {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 600;
+}
+
+/* List */
+
+.smart-tabs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Tab row */
+
+.smart-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.smart-tab-row .smart-tab-item {
+  flex: 1;
+}
+
+.smart-tab-item {
+  position: relative;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  padding: 9px 12px 9px 22px;
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smart-tab-item::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+  transform: translateY(-50%);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.smart-tab-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.smart-tab-item.smart-tab-active {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.smart-tab-item.smart-tab-active::before {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+.smart-tab-bookmark {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Rename/remove buttons */
+
+.smart-tab-remove,
+.smart-tab-rename {
+  opacity: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.smart-tab-remove {
+  font-size: 15px;
+}
+
+.smart-tab-rename {
+  font-size: 13px;
+}
+
+.smart-tab-row:hover .smart-tab-remove,
+.smart-tab-row:hover .smart-tab-rename {
+  opacity: 1;
+}
+
+.smart-tab-remove:hover,
+.smart-tab-rename:hover {
+  color: white;
+}
+
+.smart-tab-rename-input {
+  flex: 1;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Section dividers */
+
+.smart-tabs-divider {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 6px 6px 4px 6px;
+  letter-spacing: 0.5px;
+}
+
+.smart-tabs-divider-line {
+  height: 1px;
+  margin: 6px 0 8px 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Tabs On / Tabs Off button inside list */
+
+.smart-tabs-auto-toggle-section-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  text-align: left;
+  padding: 6px 6px 4px 6px;
+  margin: 2px 0 4px 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.smart-tabs-auto-toggle-section-btn:hover {
+  color: white;
+}
+
+/* Old auto toggle class kept for compatibility */
+
+.smart-tabs-auto-toggle-btn {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.smart-tabs-auto-toggle-btn:hover {
+  color: white;
+}
+
+/* Highlights */
+
+.smart-tab-highlight {
+  outline: 2px solid #8ab4f8;
+  box-shadow: 0 0 10px rgba(138, 180, 248, 0.35);
+  border-radius: 8px;
+}
+
+.smart-bookmark-highlight {
+  background: rgba(138, 180, 248, 0.35);
+  border-radius: 4px;
+  padding: 2px 4px;
+  box-shadow: 0 0 8px rgba(138, 180, 248, 0.5);
+}
+
+/* Collapsed button */
+
+#smart-tabs-collapsed {
+  position: fixed;
+  z-index: 100;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(32, 33, 35, 0.5);
+  backdrop-filter: blur(14px);
+  color: rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+/* Scrollbar */
+
+#smart-tabs-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+#smart-tabs-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+/* Debug panel */
+
+#smart-tabs-debug {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 360px;
+  max-height: 280px;
+  overflow: auto;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  font-size: 11px;
+  padding: 12px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+}
+#smart-tabs-help-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.smart-tabs-help-card {
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  background: rgba(32, 33, 35, 0.96);
+  color: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.smart-tabs-help-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+
+.smart-tabs-help-close {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.smart-tabs-help-close:hover {
+  color: white;
+}
+
+.smart-tabs-help-section {
+  margin-top: 12px;
+}
+
+.smart-tabs-help-section strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.smart-tabs-help-section p {
+  margin: 5px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}

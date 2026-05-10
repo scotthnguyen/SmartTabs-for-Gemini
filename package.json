@@ -1,0 +1,23 @@
+{
+  "name": "smarttabs",
+  "version": "1.0.0",
+  "description": "Stop wasting time scrolling through ChatGPT",
+  "scripts": {
+    "build": "vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scotthnguyen/SmartTabs.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/scotthnguyen/SmartTabs/issues"
+  },
+  "homepage": "https://github.com/scotthnguyen/SmartTabs#readme",
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10"
+  }
+}
