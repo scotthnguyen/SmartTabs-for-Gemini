@@ -136,13 +136,6 @@ function getOrderedSections(): Section[] {
 
 function renderCurrentSidebar() {
   const ordered = getOrderedSections();
-  console.table(ordered.map((s, i) => ({
-    i,
-    domOrder: s.domOrder,
-    turnId: s.turnId.slice(0, 8),
-    title: s.title.slice(0, 35),
-    type: s.type,
-  })));
   renderSidebar(ordered, {
     autoTabsEnabled,
     onRemoveTab: removeTab,
@@ -328,21 +321,6 @@ function waitForScrollContainer(callback: () => void, timeoutMs = 10000) {
   }
   poll();
 }
-
-// Expose live state for manual inspection from DevTools console.
-// Usage: __smartTabsDebug.dump()
-(window as any).__smartTabsDebug = {
-  dump() {
-    const sections = getOrderedSections();
-    console.table(sections.map(s => ({
-      turnId: s.turnId,
-      domOrder: s.domOrder,
-      title: s.title.slice(0, 40),
-      type: s.type,
-      top: s.element?.getBoundingClientRect?.()?.top ?? "n/a",
-    })));
-  }
-};
 
 startPollingRouteChanges();
 

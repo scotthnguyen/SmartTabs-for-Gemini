@@ -1,3 +1,4 @@
+import { getScrollContainer } from "./parser";
 import type { Section } from "./parser";
 
 const SIDEBAR_ID = "smart-tabs-sidebar";
@@ -320,28 +321,76 @@ function jumpToTarget(target: HTMLElement) {
   scrollContainer.scrollTop = targetTop - 16;
 }
 
-function jumpToBookmark(section: Section, target: HTMLElement) {
-  const scrollContainer =
-    getScrollableAncestor(target) || activeScrollContainer;
+async function waitForTurnId(
+  turnId: string,
+  scrollContainer: Element,
+  scrollTop: number,
+  timeoutMs = 3000,
+  intervalMs = 100
+): Promise<HTMLElement | null> {
+  scrollContainer.scrollTop = scrollTop;
 
-  if (!scrollContainer) {
-    target.scrollIntoView({ behavior: "auto", block: "start" });
-    return;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const el = document.getElementById(turnId);
+    if (el) {
+      const userQuery = el.querySelector("user-query") as HTMLElement;
+      return userQuery ?? (el as HTMLElement);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
 
-  const targetTop = getElementTopInScrollContainer(target, scrollContainer);
+  return null;
+}
 
-  if (typeof section.offsetWithinMessage === "number") {
-    scrollContainer.scrollTop = targetTop + section.offsetWithinMessage;
-    return;
+async function jumpToBookmark(section: Section): Promise<HTMLElement | null> {
+  if (section.type === "bookmark") {
+    const liveEl = section.element;
+    const isRealElement = liveEl?.isConnected && liveEl !== document.body;
+
+    if (isRealElement) {
+      const scrollContainer = getScrollableAncestor(liveEl) || activeScrollContainer;
+      if (scrollContainer) {
+        const targetTop = getElementTopInScrollContainer(liveEl, scrollContainer);
+        if (typeof section.offsetWithinMessage === "number") {
+          scrollContainer.scrollTop = targetTop + section.offsetWithinMessage;
+        } else if (typeof section.scrollTop === "number") {
+          scrollContainer.scrollTop = section.scrollTop;
+        } else {
+          scrollContainer.scrollTop = targetTop - 16;
+        }
+      } else {
+        liveEl.scrollIntoView({ behavior: "auto", block: "start" });
+      }
+      flashTarget(liveEl);
+      return liveEl;
+    }
+
+    // Storage-restored bookmark: element is document.body placeholder.
+    // activeScrollContainer is the same container scrollTop was saved against.
+    if (activeScrollContainer && typeof section.scrollTop === "number") {
+      activeScrollContainer.scrollTop = section.scrollTop;
+    }
+    return null;
   }
 
-  if (typeof section.scrollTop === "number") {
-    scrollContainer.scrollTop = section.scrollTop;
-    return;
-  }
+  // Auto tabs: hex turnId lookup → poll → findLiveElement
+  const scrollContainer = getScrollContainer();
+  let el: HTMLElement | null =
+    (document.getElementById(section.turnId)?.querySelector(
+      "user-query"
+    ) as HTMLElement) ?? null;
 
-  scrollContainer.scrollTop = targetTop - 16;
+  if (!el && section.scrollTop !== undefined && scrollContainer) {
+    el = await waitForTurnId(section.turnId, scrollContainer, section.scrollTop);
+  }
+  if (!el) el = findLiveElement(section);
+
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    flashTarget(el);
+  }
+  return el;
 }
 
 function flashTarget(target: HTMLElement, duration = 1400) {
@@ -737,39 +786,23 @@ function createTabRow(section: Section, actions: SidebarActions) {
     item.classList.add("smart-tab-bookmark");
   }
 
-  item.onclick = () => {
-    const live = findLiveElement(section);
-
+  item.onclick = async () => {
     if (section.type === "bookmark") {
-      if (live) {
-        const target = getVisualTarget(live);
-
-        jumpToBookmark(section, target);
+      item.style.opacity = "0.5";
+      try {
+        const el = await jumpToBookmark(section);
         setActiveTab(section);
-
-        window.setTimeout(() => {
-          if (section.selectedText) {
-            highlightTextInside(target, section.selectedText);
-          }
-        }, 150);
-
-        return;
-      }
-
-      if (typeof section.scrollTop === "number") {
-        const fallback =
-          activeScrollContainer ||
-          document.querySelector<HTMLElement>("main");
-
-        if (fallback) {
-          fallback.scrollTop = section.scrollTop;
-          setActiveTab(section);
+        if (el && section.selectedText) {
+          const container = getMessageContainer(el);
+          window.setTimeout(() => highlightTextInside(container, section.selectedText!), 150);
         }
+      } finally {
+        item.style.opacity = "";
       }
-
       return;
     }
 
+    const live = findLiveElement(section);
     if (!live) return;
 
     const target = getVisualTarget(live);
