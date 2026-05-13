@@ -54,7 +54,7 @@ function makeTitle(
 ): string {
   const cleanedText = normalizeText(userText);
   if (attachedFilename && !isImageFilename(attachedFilename)) {
-    return attachedFilename.toLowerCase().endsWith(".pdf") ? "PDF attached" : "File attached";
+    return cleanedText ? cleanedText : `📎 ${attachedFilename}`;
   }
   if (imageAttached) return makePrefixedImageTitle(cleanedText, attachedFilename);
   if (cleanedText) return cleanedText;
@@ -65,27 +65,22 @@ export function getScrollContainer(): HTMLElement | null {
   return document.querySelector<HTMLElement>(SELECTORS.scrollContainer);
 }
 
-export function parseConversation(): Section[] {
-  const sc = getScrollContainer();
+export type AttachmentCache = Record<string, { imageAttached: boolean; filename: string | null }>;
 
-  console.log("[SmartTabs] parseConversation called", {
-    hasScrollContainer: !!sc,
-    url: window.location.href,
-  });
+export function parseConversation(
+  attachmentCache: AttachmentCache = {}
+): { sections: Section[]; updatedCache: AttachmentCache } {
+  if (!getScrollContainer()) return { sections: [], updatedCache: attachmentCache };
 
-  if (!sc) return [];
+  // Ordering is managed by content.ts's turnOrder; querySelectorAll gives whatever
+  // elements Gemini's virtual scroll currently has in the DOM.
+  const userQueryEls = [...document.querySelectorAll<HTMLElement>(SELECTORS.userMessage)];
 
-  const containers = Array.from(
-    sc.querySelectorAll<HTMLElement>(SELECTORS.conversationContainer)
-  );
-
-  console.log("[SmartTabs] conversation-container count:", containers.length);
-
+  const updatedCache: AttachmentCache = { ...attachmentCache };
   const sections: Section[] = [];
 
-  containers.forEach((container, index) => {
-    const userQueryEl = container.querySelector<HTMLElement>(SELECTORS.userMessage);
-    if (!userQueryEl) return;
+  userQueryEls.forEach((userQueryEl, index) => {
+    const container = userQueryEl.closest<HTMLElement>(SELECTORS.conversationContainer);
 
     const contentEl = userQueryEl.querySelector<HTMLElement>(SELECTORS.userMessageText);
     // innerText respects newlines so the "You said\n\n" prefix can be stripped reliably.
@@ -95,27 +90,49 @@ export function parseConversation(): Section[] {
     const turnId =
       userQueryEl.closest<HTMLElement>("div[id]")?.id ?? `gemini-turn-${index}`;
 
-    const imgInContainer = container.querySelector("img") !== null;
-    const attachedFilename: string | null = null; // TODO: verify once Gemini attachment DOM is inspected
-    const imageAttached = imgInContainer;
+    // DOM is authoritative when visible; fall back to persisted cache on reload
+    // when blob/data URLs have been revoked and attachment elements are gone.
+    const imgs = Array.from(userQueryEl.querySelectorAll<HTMLImageElement>("img"));
+    const domImageAttached =
+      imgs.some((img) => /^(blob:|data:)/.test(img.src)) ||
+      userQueryEl.querySelector('[class*="attachment"],[class*="upload"]') !== null;
+
+    // Probe for a file/PDF chip that Gemini renders inside the user turn.
+    const fileAttachmentEl = userQueryEl.querySelector<HTMLElement>(
+      '[data-testid*="file"], [class*="file-attachment"], ' +
+      '[class*="pdf"], [aria-label*="PDF"], [aria-label*="file"]'
+    );
+    const fileFilename =
+      fileAttachmentEl?.getAttribute("aria-label")?.trim() ||
+      fileAttachmentEl?.textContent?.trim().slice(0, 40) ||
+      null;
+
+    let imageAttached: boolean;
+    let attachedFilename: string | null = fileFilename;
+
+    const stored = attachmentCache[turnId];
+    if (domImageAttached) {
+      imageAttached = true;
+      updatedCache[turnId] = { imageAttached: true, filename: null };
+    } else if (stored?.imageAttached) {
+      imageAttached = true;
+      attachedFilename = attachedFilename ?? stored.filename;
+    } else {
+      imageAttached = false;
+    }
 
     let contextText: string | undefined;
-    const modelResponseEl = container.querySelector<HTMLElement>(SELECTORS.assistantMessage);
-    if (modelResponseEl) {
-      contextText = (modelResponseEl.textContent ?? "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 1500);
+    if (container) {
+      const modelResponseEl = container.querySelector<HTMLElement>(SELECTORS.assistantMessage);
+      if (modelResponseEl) {
+        contextText = (modelResponseEl.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 1500);
+      }
     }
 
     const generatedId = `smart-${index}-${simpleHash(rawText || turnId)}`;
-
-    console.log(`[SmartTabs] turn[${index}]`, {
-      turnId,
-      rawText: rawText.slice(0, 60) || "(empty)",
-      imageAttached,
-      hasContext: !!contextText,
-    });
 
     sections.push({
       id: generatedId,
@@ -130,7 +147,7 @@ export function parseConversation(): Section[] {
     });
   });
 
-  return sections;
+  return { sections, updatedCache };
 }
 
 // Observes chat-window subtree for new conversation-container nodes.

@@ -1,4 +1,4 @@
-import { parseConversation, observeConversation, getScrollContainer, type Section } from "./parser";
+import { parseConversation, observeConversation, getScrollContainer, type Section, type AttachmentCache } from "./parser";
 import { renderSidebar, resetSidebarState, disconnectNavTracking } from "./sidebar";
 
 // Minimal chrome.storage types — avoids pulling in the full @types/chrome package
@@ -13,7 +13,9 @@ declare const chrome: {
 
 console.log("[SmartTabs] content script loaded", window.location.href);
 
+
 const STORAGE_KEY = "smart-tabs-bookmarks-v2";
+const ATTACHMENT_KEY_PREFIX = "smarttabs-attachments-";
 const SENTINEL_ID = "smarttabs-root";
 
 // Keyed by chat UUID (not full pathname)
@@ -21,6 +23,7 @@ let currentChatId = "";
 let autoTabsEnabled = true;
 let conversationObserver: MutationObserver | null = null;
 let initGeneration = 0;
+let attachmentCache: AttachmentCache = {};
 
 const sectionMap = new Map<string, Section>();
 const removedKeys = new Set<string>();
@@ -28,6 +31,8 @@ const removedKeys = new Set<string>();
 type StoredBookmark = Omit<Section, "element">;
 
 function getKey(section: Section): string {
+  // Auto sections use stable turnId so virtual-scroll index shifts don't create duplicates.
+  if (section.type !== "bookmark") return section.turnId || section.id;
   return section.id || section.turnId || section.rawText.toLowerCase();
 }
 
@@ -64,6 +69,29 @@ function getStoredBookmarks(): Promise<Record<string, StoredBookmark[]>> {
   });
 }
 
+function getAttachmentStorageKey(): string {
+  return `${ATTACHMENT_KEY_PREFIX}${currentChatId}`;
+}
+
+function loadAttachmentCache(): Promise<void> {
+  const key = getAttachmentStorageKey();
+  return new Promise((resolve) => {
+    chrome.storage.local.get(key, (result) => {
+      const value = result[key];
+      attachmentCache =
+        typeof value === "object" && value !== null
+          ? (value as AttachmentCache)
+          : {};
+      resolve();
+    });
+  });
+}
+
+function saveAttachmentCache(updated: AttachmentCache): void {
+  attachmentCache = updated;
+  chrome.storage.local.set({ [getAttachmentStorageKey()]: updated });
+}
+
 async function saveBookmarksForCurrentChat(): Promise<void> {
   if (!currentChatId) return;
 
@@ -89,8 +117,9 @@ async function loadBookmarksForCurrentChat(): Promise<void> {
 async function resetForNewChat(): Promise<void> {
   sectionMap.clear();
   removedKeys.clear();
+  attachmentCache = {};
   resetSidebarState();
-  await loadBookmarksForCurrentChat();
+  await Promise.all([loadBookmarksForCurrentChat(), loadAttachmentCache()]);
 }
 
 function getOrderedSections(): Section[] {
@@ -106,7 +135,15 @@ function getOrderedSections(): Section[] {
 }
 
 function renderCurrentSidebar() {
-  renderSidebar(getOrderedSections(), {
+  const ordered = getOrderedSections();
+  console.table(ordered.map((s, i) => ({
+    i,
+    domOrder: s.domOrder,
+    turnId: s.turnId.slice(0, 8),
+    title: s.title.slice(0, 35),
+    type: s.type,
+  })));
+  renderSidebar(ordered, {
     autoTabsEnabled,
     onRemoveTab: removeTab,
     onRenameTab: renameTab,
@@ -116,18 +153,19 @@ function renderCurrentSidebar() {
   });
 }
 
+function parseAndMerge() {
+  const { sections, updatedCache } = parseConversation(attachmentCache);
+  saveAttachmentCache(updatedCache);
+  mergeSections(sections);
+}
+
 function mergeSections(newSections: Section[]) {
   newSections.forEach((section) => {
     const key = getKey(section);
     const existing = sectionMap.get(key);
-
-    if (existing) {
-      sectionMap.set(key, { ...section, title: existing.title });
-    } else {
-      sectionMap.set(key, section);
-    }
+    // Spread new section (picks up updated domOrder/element) but keep user-set title.
+    sectionMap.set(key, existing ? { ...section, title: existing.title } : section);
   });
-
   renderCurrentSidebar();
 }
 
@@ -147,7 +185,12 @@ function renameTab(section: Section, newTitle: string) {
   const existing = sectionMap.get(key);
   if (!existing) return;
 
-  sectionMap.set(key, { ...existing, title: newTitle });
+  const finalTitle =
+    existing.type === "bookmark" && !newTitle.startsWith("★ ")
+      ? `★ ${newTitle}`
+      : newTitle;
+
+  sectionMap.set(key, { ...existing, title: finalTitle });
 
   if (existing.type === "bookmark") {
     void saveBookmarksForCurrentChat();
@@ -186,6 +229,26 @@ function createLocationBookmark(section: Section, name: string) {
   renderCurrentSidebar();
 }
 
+// Scrolls to the top of the chat container and waits for lazy-loaded messages
+// to finish rendering (scroll height stabilizes). This guarantees that
+// querySelectorAll order === chronological order before the first parse.
+async function scrollToTopAndLoad(scrollContainer: Element): Promise<void> {
+  return new Promise((resolve) => {
+    let lastHeight = 0;
+    let iterations = 0;
+    const MAX_ITERATIONS = 20; // cap at ~12 s for very long chats
+    const interval = setInterval(() => {
+      scrollContainer.scrollTop = 0;
+      const newHeight = scrollContainer.scrollHeight;
+      if (newHeight === lastHeight || ++iterations >= MAX_ITERATIONS) {
+        clearInterval(interval);
+        setTimeout(resolve, 500);
+      }
+      lastHeight = newHeight;
+    }, 600);
+  });
+}
+
 // Gemini's Angular router does not reliably fire pushState or popstate events,
 // so we poll instead. 500ms is imperceptible but catches all navigations.
 let lastPathname = window.location.pathname;
@@ -201,13 +264,14 @@ function startPollingRouteChanges() {
 }
 
 function handleRouteChange() {
+  // 1. Disconnect conversation observer
   conversationObserver?.disconnect();
   conversationObserver = null;
-  // Remove sidebar instantly — don't wait for re-init
+  // 2. Disconnect nav observer
+  disconnectNavTracking();
+  // 3. Remove sidebar DOM
   removeSidebarFromPage();
-
-  // Generation counter: if a second navigation fires during the 400ms wait,
-  // the stale setTimeout callback checks gen and silently exits.
+  // 4. Re-init after Angular router settles
   const gen = ++initGeneration;
   window.setTimeout(() => {
     if (gen === initGeneration) void init();
@@ -215,17 +279,8 @@ function handleRouteChange() {
 }
 
 async function init(): Promise<void> {
-  console.log("[SmartTabs] init called", {
-    pathname: window.location.pathname,
-    isInChat: isInChat(),
-    chatId: getChatId(),
-    sentinelPresent: !!document.getElementById(SENTINEL_ID),
-    currentChatId,
-  });
-
   // Prevent double-injection: sentinel is removed by removeSidebarFromPage()
   if (document.getElementById(SENTINEL_ID)) {
-    console.log("[SmartTabs] init bailed — sentinel already present");
     return;
   }
 
@@ -238,7 +293,6 @@ async function init(): Promise<void> {
 
   // Not on a /chat/<uuid> page — ensure sidebar is gone and bail
   if (!isInChat() || !newChatId) {
-    console.log("[SmartTabs] init bailed — not in chat", { isInChat: isInChat(), newChatId });
     removeSidebarFromPage();
     return;
   }
@@ -248,13 +302,16 @@ async function init(): Promise<void> {
     await resetForNewChat();
   }
 
-  console.log("[SmartTabs] init calling parseConversation");
-  const parsed = parseConversation();
-  mergeSections(parsed);
+  // Scroll to top so all messages load into the DOM in document (chronological) order
+  // before we parse. Without this, virtual scrolling delivers messages in random batches.
+  const scrollContainer = getScrollContainer();
+  if (scrollContainer) {
+    await scrollToTopAndLoad(scrollContainer);
+  }
 
-  conversationObserver = observeConversation(() => {
-    mergeSections(parseConversation());
-  });
+  parseAndMerge();
+
+  conversationObserver = observeConversation(parseAndMerge);
 }
 
 // Gemini is an Angular SPA — the scroll container may not exist at document_idle.
@@ -263,34 +320,32 @@ async function init(): Promise<void> {
 function waitForScrollContainer(callback: () => void, timeoutMs = 10000) {
   const start = Date.now();
   function poll() {
-    const sc = getScrollContainer();
-    if (sc) {
-      console.log("[SmartTabs] scroll container found", {
-        tag: sc.tagName,
-        className: sc.className.slice(0, 100),
-        scrollHeight: sc.scrollHeight,
-        elapsed: Date.now() - start,
-      });
+    if (getScrollContainer()) {
       callback();
     } else if (Date.now() - start < timeoutMs) {
       window.setTimeout(poll, 200);
-    } else {
-      console.warn("[SmartTabs] waitForScrollContainer timed out after", timeoutMs, "ms — scroll container never found");
     }
   }
   poll();
 }
 
-console.log("[SmartTabs] bootstrap", {
-  pathname: window.location.pathname,
-  isInChat: isInChat(),
-  chatId: getChatId(),
-});
+// Expose live state for manual inspection from DevTools console.
+// Usage: __smartTabsDebug.dump()
+(window as any).__smartTabsDebug = {
+  dump() {
+    const sections = getOrderedSections();
+    console.table(sections.map(s => ({
+      turnId: s.turnId,
+      domOrder: s.domOrder,
+      title: s.title.slice(0, 40),
+      type: s.type,
+      top: s.element?.getBoundingClientRect?.()?.top ?? "n/a",
+    })));
+  }
+};
 
 startPollingRouteChanges();
 
 if (isInChat()) {
   waitForScrollContainer(() => void init());
-} else {
-  console.log("[SmartTabs] not in chat at load — skipping init, polling for route change");
 }

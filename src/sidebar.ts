@@ -17,6 +17,10 @@ let navClickHandler: (() => void) | null = null;
 let trackedNavEl: HTMLElement | null = null;
 
 function trackNavPosition(el: HTMLElement) {
+  const sidebarEl = document.getElementById(SIDEBAR_ID);
+  const collapsedEl = document.getElementById(COLLAPSED_ID);
+  if (!sidebarEl && !collapsedEl) return;
+
   if (trackedNavEl === el) return;
 
   disconnectNavTracking();
@@ -25,6 +29,9 @@ function trackNavPosition(el: HTMLElement) {
   if (!chatWindow) return;
 
   const update = () => {
+    const currentSidebar = document.getElementById(SIDEBAR_ID);
+    const currentCollapsed = document.getElementById(COLLAPSED_ID);
+    if (!currentSidebar && !currentCollapsed) return;
     const rect = chatWindow.getBoundingClientRect();
     el.style.left = `${rect.left + 12}px`;
     el.style.top = "60px";
@@ -67,10 +74,11 @@ interface SidebarActions {
 }
 
 export function resetSidebarState() {
+  disconnectNavTracking();
   currentSections = [];
 
   if (activeScrollContainer) {
-    activeScrollContainer.removeEventListener("scroll", handleScroll);
+    activeScrollContainer.removeEventListener("scroll", handleScroll, { passive: true } as EventListenerOptions);
   }
 
   if (scrollTimeout !== null) {
@@ -643,11 +651,11 @@ function setupScrollTracking() {
   }
 
   if (activeScrollContainer) {
-    activeScrollContainer.removeEventListener("scroll", handleScroll);
+    activeScrollContainer.removeEventListener("scroll", handleScroll, { passive: true } as EventListenerOptions);
   }
 
   activeScrollContainer = container;
-  activeScrollContainer.addEventListener("scroll", handleScroll);
+  activeScrollContainer.addEventListener("scroll", handleScroll, { passive: true });
 
   updateActiveFromScroll();
 }
