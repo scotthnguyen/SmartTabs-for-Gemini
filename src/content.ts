@@ -153,13 +153,33 @@ function parseAndMerge() {
 }
 
 function mergeSections(newSections: Section[]) {
+  const newKeys = newSections.map(getKey);
+  const newKeySet = new Set(newKeys);
+
+  let changed = false;
+
+  // Remove stale auto sections — handles the case where a streaming message
+  // initially gets a fallback turnId then is re-parsed with the real hex ID.
+  for (const [key, section] of sectionMap) {
+    if (section.type !== "bookmark" && !removedKeys.has(key) && !newKeySet.has(key)) {
+      sectionMap.delete(key);
+      changed = true;
+    }
+  }
+
+  // Detect additions
+  if (!changed) changed = newKeys.some(k => !sectionMap.has(k));
+
   newSections.forEach((section) => {
     const key = getKey(section);
     const existing = sectionMap.get(key);
     // Spread new section (picks up updated domOrder/element) but keep user-set title.
     sectionMap.set(key, existing ? { ...section, title: existing.title } : section);
   });
-  renderCurrentSidebar();
+
+  // Only re-render when conversation content actually changed — not for overlays,
+  // image viewers, PDFs, thinking-mode expansions, or other non-section DOM noise.
+  if (changed) renderCurrentSidebar();
 }
 
 function removeTab(section: Section) {

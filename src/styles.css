@@ -1,6 +1,7 @@
 #smart-tabs-sidebar {
   position: fixed;
-  width: 220px;
+  z-index: 2147483647;
+  width: 175px;
   max-height: 72vh;
   overflow-y: auto;
 
@@ -12,8 +13,6 @@
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
 
   padding: 10px;
-  z-index: 100;
-
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   color: rgba(255, 255, 255, 0.85);
@@ -271,7 +270,7 @@
 
 #smart-tabs-collapsed {
   position: fixed;
-  z-index: 100;
+  z-index: 2147483646;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(32, 33, 35, 0.5);
   backdrop-filter: blur(14px);
@@ -279,6 +278,10 @@
   border-radius: 999px;
   padding: 8px 12px;
   cursor: pointer;
+}
+
+.smart-tabs-modal-hidden {
+  display: none !important;
 }
 
 /* Scrollbar */
@@ -301,7 +304,6 @@
   width: 360px;
   max-height: 280px;
   overflow: auto;
-  z-index: 100;
   background: rgba(0, 0, 0, 0.75);
   color: white;
   font-size: 11px;

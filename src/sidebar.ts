@@ -17,6 +17,55 @@ let navObserver: ResizeObserver | null = null;
 let navClickHandler: (() => void) | null = null;
 let trackedNavEl: HTMLElement | null = null;
 
+let modalObserver: MutationObserver | null = null;
+let modalCheckTimeout: number | null = null;
+
+function isModalOpen(): boolean {
+  return !!document.querySelector('mat-dialog-container.mdc-dialog--open');
+}
+
+function updateModalVisibility() {
+  const hidden = isModalOpen();
+  document.getElementById(SIDEBAR_ID)?.classList.toggle('smart-tabs-modal-hidden', hidden);
+  document.getElementById(COLLAPSED_ID)?.classList.toggle('smart-tabs-modal-hidden', hidden);
+}
+
+function installModalWatcher() {
+  if (modalObserver) return;
+
+  const cb = () => {
+    if (modalCheckTimeout !== null) return;
+    modalCheckTimeout = window.setTimeout(() => {
+      modalCheckTimeout = null;
+      updateModalVisibility();
+    }, 80);
+  };
+
+  modalObserver = new MutationObserver(cb);
+
+  // Angular puts all dialogs inside .cdk-overlay-container (a direct body child).
+  // Watching it for childList + attribute changes catches both dialog insertion
+  // and the mdc-dialog--open class toggle without scanning the full page subtree.
+  const overlayRoot =
+    document.querySelector('.cdk-overlay-container') ?? document.body;
+
+  modalObserver.observe(overlayRoot, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+}
+
+export function disconnectModalWatcher() {
+  modalObserver?.disconnect();
+  modalObserver = null;
+  if (modalCheckTimeout !== null) {
+    window.clearTimeout(modalCheckTimeout);
+    modalCheckTimeout = null;
+  }
+}
+
 function trackNavPosition(el: HTMLElement) {
   const sidebarEl = document.getElementById(SIDEBAR_ID);
   const collapsedEl = document.getElementById(COLLAPSED_ID);
@@ -76,6 +125,7 @@ interface SidebarActions {
 
 export function resetSidebarState() {
   disconnectNavTracking();
+  disconnectModalWatcher();
   currentSections = [];
 
   if (activeScrollContainer) {
@@ -716,7 +766,7 @@ function showCollapsed(actions: SidebarActions) {
     btn = document.createElement("button");
     btn.id = COLLAPSED_ID;
     btn.textContent = "Tabs";
-    document.body.appendChild(btn);
+    document.body.insertBefore(btn, document.body.firstChild);
   }
 
   btn.onclick = () => {
@@ -843,6 +893,7 @@ function createTabRow(section: Section, actions: SidebarActions) {
 export function renderSidebar(sections: Section[], actions: SidebarActions) {
   latestActions = actions;
   installBookmarkKeybind();
+  installModalWatcher();
 
   currentSections = sections;
 
@@ -859,7 +910,7 @@ export function renderSidebar(sections: Section[], actions: SidebarActions) {
   if (!sidebar) {
     sidebar = document.createElement("div");
     sidebar.id = SIDEBAR_ID;
-    document.body.appendChild(sidebar);
+    document.body.insertBefore(sidebar, document.body.firstChild);
   }
 
   trackNavPosition(sidebar);
