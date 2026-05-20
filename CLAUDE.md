@@ -59,6 +59,12 @@ chat-window                          ← scroll container
     model-response                   ← assistant turn
   div.conversation-container
     ...
+
+body
+  .cdk-overlay-container             ← Angular overlay host (direct body child)
+    mat-dialog-container.mdc-dialog--open  ← image/PDF viewer when open
+      expansion-dialog               ← inner Angular component
+        mat-dialog-content.trusted-image-dialog-container
 ```
 
 All selectors are in the `SELECTORS` const in `parser.ts` — never hardcode them.
@@ -119,6 +125,34 @@ The `waitForTurnId` polling helper is only useful for auto tabs with real hex ID
 - Gemini is an Angular SPA — poll for `chat-window` before mounting (up to 10s)
 - Storage operations are async — fire-and-forget from event handlers is intentional
 - `renderCurrentSidebar()` fires on every DOM mutation via the observer — do not add `console.log` or `console.table` there
+
+## Z-index / Stacking
+
+- `#smart-tabs-sidebar`: `z-index: 2147483647` (max) — must sit above Gemini's UI chrome
+- `#smart-tabs-collapsed`: `z-index: 2147483646` — just below sidebar, always clickable
+- `#smart-tabs-help-modal`: `z-index: 1000` — rendered inside the sidebar stacking context
+
+## Modal / Image Viewer Auto-hide
+
+When Gemini's image or PDF viewer is open, both the sidebar and collapsed button are
+hidden via the `.smart-tabs-modal-hidden` CSS class (`display: none !important`).
+
+**How detection works** (`installModalWatcher` in `sidebar.ts`):
+- A `MutationObserver` watches `.cdk-overlay-container` (Angular's overlay host,
+  a direct `<body>` child) with `childList + subtree + attributes[class]`.
+- `isModalOpen()` checks for `mat-dialog-container.mdc-dialog--open`.
+- Angular keeps `mat-dialog-container` in the DOM permanently — only the
+  `mdc-dialog--open` class is toggled, so an attribute observer is required.
+  A childList-only observer will miss open/close events.
+- `disconnectModalWatcher()` must be called from `resetSidebarState()` on route change.
+
+## Duplicate Tab Prevention
+
+During streaming, a new user message may first appear with a fallback turnId
+(`gemini-turn-<index>`) before Gemini assigns the real hex ID. `mergeSections()`
+in `content.ts` actively deletes any auto section from `sectionMap` that is no
+longer returned by the latest parse, preventing stale fallback entries from
+persisting alongside the real ones.
 
 ## Known Limitations
 - ⚠️ File/image attachment selector not yet confirmed — `attachedFilename` is
